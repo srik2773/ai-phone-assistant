@@ -1,0 +1,15 @@
+{
+  "name": "personal-voice-agent",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "dashboard": "node dashboard/server.js",
+    "dashboard:setup": "node dashboard/setup.js",
+    "dashboard:shortcut": "node dashboard/create-shortcut.js"
+  },
+  "devDependencies": {
+    "wrangler": "^3"
+  }
+}

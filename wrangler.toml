@@ -1,0 +1,29 @@
+name = "personal-voice-agent"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# Same KV namespace as before, just renamed now that it only stores in-progress call records.
+kv_namespaces = [
+  { binding = "CALL_STORE", id = "<your-kv-namespace-id>" }
+]
+
+# Optional: override the models without editing code.
+# CALL_MODEL runs the live conversation (default claude-haiku-4-5-20251001, picked for speed);
+# MODEL writes the after-call summary text (default claude-sonnet-5).
+# [vars]
+# CALL_MODEL = "claude-haiku-4-5-20251001"
+# MODEL = "claude-sonnet-5"
+
+# Secrets (never put these here — set via `npx wrangler secret put <NAME>`):
+#   ANTHROPIC_API_KEY   - your Anthropic API key
+#   TWILIO_ACCOUNT_SID  - from the Twilio console dashboard
+#   TWILIO_AUTH_TOKEN   - from the Twilio console dashboard (also used to verify incoming Twilio webhooks)
+#   TWILIO_PHONE_NUMBER - the Twilio number you bought, in E.164 format e.g. +614xxxxxxxx
+#   MY_PHONE_NUMBER     - your own phone number, in E.164 format, where call summaries get texted
+#
+# Optional, to log every call to Airtable (see README "Call log and dashboard"):
+#   AIRTABLE_TOKEN      - Airtable personal access token
+#   AIRTABLE_BASE_ID    - the base id, starts with "app"
+# AIRTABLE_TABLE can go under [vars] if your table isn't named "Calls".
+#
+# The SHARED_SECRET secret from the earlier Siri Shortcut experiment is no longer used and can be left as is or removed.

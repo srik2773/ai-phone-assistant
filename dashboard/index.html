@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #616a75; --border: #e1e4e8;
+    --accent: #2f6fdb; --on-accent: #ffffff; --urgent: #c62828; --urgent-bg: #fdecec; --calm: #2e7d32; --calm-bg: #e9f5ea;
+    --pending: #8a5a00; --pending-bg: #fff4d6; --done: #59616b; --done-bg: #eef0f2;
+    /* Chart colors: urgent/non-urgent and pending/handled pairs */
+    --c-urgent: #d03b3b; --c-calm: #2a78d6; --c-pending: #eda100; --c-handled: #8f8e89;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1a1f25; --text: #e6e9ed; --muted: #9aa3ad; --border: #2b323a;
+      --accent: #6ea0ff; --on-accent: #0b1220; --urgent: #ff7b7b; --urgent-bg: #3a1c1c; --calm: #7bd88a; --calm-bg: #1c3222;
+      --pending: #f0c060; --pending-bg: #3a2f14; --done: #a0a8b2; --done-bg: #262c33;
+      --c-urgent: #d03b3b; --c-calm: #3987e5; --c-pending: #c98500; --c-handled: #77766f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0; }
+  .updated { color: var(--muted); font-size: 13px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 6px 12px; }
+  button:hover { border-color: var(--accent); }
+  .tabs { display: flex; gap: 8px; margin: 20px 0 16px; flex-wrap: wrap; }
+  .tab { padding: 8px 14px; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .count { opacity: .8; margin-left: 6px; font-variant-numeric: tabular-nums; }
+  input[type=search] { width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; margin-bottom: 16px; }
+  .call { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .call.urgent { border-left: 5px solid var(--c-urgent); }
+  .call.handled { opacity: .7; }
+  .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .name { font-weight: 600; font-size: 16px; }
+  .when { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .b-urgent { color: #fff; background: var(--c-urgent); }
+  .b-calm { color: #fff; background: var(--c-calm); }
+  .b-pending { color: #1b1f24; background: var(--c-pending); }
+  .b-handled { color: #fff; background: var(--c-handled); }
+  .summary { margin: 8px 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .actions { display: flex; gap: 8px; margin-top: 10px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--bg); padding: 10px; border-radius: 8px; margin: 8px 0 0; }
+  /* Overview panel */
+  .overview { margin-top: 20px; display: grid; gap: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; text-align: left; }
+  .tile[data-view] { cursor: pointer; }
+  .tile[data-view]:hover { border-color: var(--accent); }
+  .tile .label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .tile .num { font-size: 30px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .charts { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
+  .split + .split { margin-top: 18px; }
+  .split-title { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .bar { display: flex; gap: 2px; height: 16px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .seg { height: 100%; cursor: pointer; min-width: 4px; }
+  .seg:hover { filter: brightness(1.1); }
+  .seg-labels { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 13px; }
+  .seg-labels span { display: flex; align-items: center; gap: 6px; }
+  .seg-labels b { font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin: -4px 0 8px; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  #trend svg { display: block; width: 100%; height: auto; overflow: visible; }
+  #trend text { fill: var(--muted); font-size: 11px; }
+  .tip { position: fixed; pointer-events: none; background: var(--text); color: var(--card); font-size: 12px; padding: 6px 8px; border-radius: 6px; white-space: nowrap; z-index: 10; display: none; }
+  @media (max-width: 640px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+  }
+  .empty, .error { text-align: center; color: var(--muted); padding: 40px 0; }
+  .error { color: var(--urgent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Screened calls</h1>
+    <div class="row">
+      <span class="updated" id="updated"></span>
+      <button id="refresh">Refresh</button>
+    </div>
+  </header>
+  <section class="overview" id="overview" hidden>
+    <div class="tiles" id="tiles"></div>
+    <div class="charts">
+      <div class="card">
+        <h2>Breakdown</h2>
+        <div id="splits"></div>
+      </div>
+      <div class="card">
+        <h2>Calls in the last 14 days</h2>
+        <div class="legend"><span><i class="dot" style="background:var(--c-urgent)"></i>Urgent</span><span><i class="dot" style="background:var(--c-calm)"></i>Non-Urgent</span></div>
+        <div id="trend"></div>
+      </div>
+    </div>
+  </section>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="tip" id="tip"></div>
+  <input type="search" id="search" placeholder="Search name, number or reason">
+  <section id="list"><div class="empty">Loading calls…</div></section>
+</main>
+<script>
+const REFRESH_MINUTES = __REFRESH_MINUTES__;
+const VIEWS = {
+  "All": () => true,
+  "Urgent": (c) => c.urgency === "Urgent",
+  "Non-Urgent": (c) => c.urgency !== "Urgent",
+  "Pending": (c) => c.status === "Pending",
+};
+let calls = [];
+let view = "All";
+try { view = localStorage.getItem("view") || "All"; } catch (e) {}
+if (!VIEWS[view]) view = "All";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 60 * 24) return `${Math.round(mins / 60)} h ago`;
+  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
+function renderTabs() {
+  $("tabs").innerHTML = Object.keys(VIEWS).map((name) =>
+    `<button class="tab ${name === view ? "active" : ""}" data-view="${name}">${name}<span class="count">${calls.filter(VIEWS[name]).length}</span></button>`
+  ).join("");
+}
+
+function renderList() {
+  const q = $("search").value.trim().toLowerCase();
+  const shown = calls.filter(VIEWS[view]).filter((c) =>
+    !q || [c.caller, c.phone, c.callback, c.reason, c.summary].join(" ").toLowerCase().includes(q)
+  );
+  if (!shown.length) {
+    $("list").innerHTML = `<div class="empty">No ${view === "All" ? "" : view.toLowerCase() + " "}calls${q ? " match your search" : ""}.</div>`;
+    return;
+  }
+  $("list").innerHTML = shown.map((c) => {
+    const urgent = c.urgency === "Urgent";
+    const pending = c.status === "Pending";
+    const number = c.callback || c.phone;
+    return `<article class="call ${urgent ? "urgent" : ""} ${pending ? "" : "handled"}">
+      <div class="row">
+        <span class="name">${esc(c.caller)}</span>
+        <span class="badge ${urgent ? "b-urgent" : "b-calm"}">${urgent ? "Urgent" : "Non-Urgent"}</span>
+        <span class="badge ${pending ? "b-pending" : "b-handled"}">${pending ? "Pending" : "Handled"}</span>
+        <span class="when" title="${esc(new Date(c.received).toLocaleString())}">${timeAgo(c.received)}</span>
+      </div>
+      <div class="summary">${esc(c.summary || c.reason || "No summary.")}</div>
+      <div class="meta">
+        ${c.phone ? `Called from <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ""}
+        ${c.callback && c.callback !== c.phone ? ` · Call back on <a href="tel:${esc(c.callback)}">${esc(c.callback)}</a>` : ""}
+      </div>
+      ${c.transcript ? `<details><summary>Transcript</summary><pre>${esc(c.transcript)}</pre></details>` : ""}
+      <div class="actions">
+        <button data-id="${c.id}" data-status="${pending ? "Handled" : "Pending"}">${pending ? "Mark handled" : "Mark pending"}</button>
+        ${number ? `<button data-copy="${esc(number)}">Copy number</button>` : ""}
+      </div>
+    </article>`;
+  }).join("");
+}
+
+function setView(name) {
+  view = name;
+  try { localStorage.setItem("view", view); } catch (err) {}
+  render();
+}
+
+// Hover tooltip shared by every chart mark: set data-tip on the element.
+document.addEventListener("mousemove", (e) => {
+  const target = e.target.closest("[data-tip]");
+  const tip = $("tip");
+  if (!target) { tip.style.display = "none"; return; }
+  tip.textContent = target.dataset.tip;
+  tip.style.display = "block";
+  const x = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
+  tip.style.left = x + "px";
+  tip.style.top = (e.clientY + 14) + "px";
+});
+
+const pct = (n, total) => total ? Math.round((n / total) * 100) : 0;
+
+function renderOverview() {
+  $("overview").hidden = calls.length === 0;
+  if (!calls.length) return;
+  const total = calls.length;
+  const urgent = calls.filter(VIEWS["Urgent"]).length;
+  const pending = calls.filter(VIEWS["Pending"]).length;
+  const tile = (label, num, color, target) =>
+    `<button class="tile" ${target ? `data-view="${target}"` : ""}>
+      <div class="label">${color ? `<i class="dot" style="background:var(${color})"></i>` : ""}${label}</div>
+      <div class="num">${num}</div>
+    </button>`;
+  $("tiles").innerHTML =
+    tile("All calls", total, "", "All") +
+    tile("Urgent", urgent, "--c-urgent", "Urgent") +
+    tile("Pending", pending, "--c-pending", "Pending") +
+    tile("Handled", total - pending, "--c-handled", "");
+
+  const split = (title, parts) => {
+    const shown = parts.filter((p) => p.n > 0);
+    return `<div class="split">
+      <div class="split-title">${title}</div>
+      <div class="bar">${shown.map((p) =>
+        `<div class="seg" style="flex:${p.n};background:var(${p.color})" ${p.view ? `data-view="${p.view}"` : ""} data-tip="${p.label}: ${p.n} of ${total} (${pct(p.n, total)}%)"></div>`
+      ).join("")}</div>
+      <div class="seg-labels">${parts.map((p) =>
+        `<span><i class="dot" style="background:var(${p.color})"></i>${p.label} <b>${p.n}</b> · ${pct(p.n, total)}%</span>`
+      ).join("")}</div>
+    </div>`;
+  };
+  $("splits").innerHTML =
+    split("Urgency", [
+      { label: "Urgent", n: urgent, color: "--c-urgent", view: "Urgent" },
+      { label: "Non-Urgent", n: total - urgent, color: "--c-calm", view: "Non-Urgent" },
+    ]) +
+    split("Status", [
+      { label: "Pending", n: pending, color: "--c-pending", view: "Pending" },
+      { label: "Handled", n: total - pending, color: "--c-handled", view: "" },
+    ]);
+
+  renderTrend();
+}
+
+// Stacked columns per day: non-urgent on the baseline, urgent on top.
+function renderTrend() {
+  const DAYS = 14;
+  const days = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    days.push({ date: d, urgent: 0, calm: 0 });
+  }
+  for (const c of calls) {
+    const d = new Date(c.received); d.setHours(0, 0, 0, 0);
+    const idx = Math.round((d - days[0].date) / 86400000);
+    if (idx < 0 || idx >= DAYS) continue;
+    if (c.urgency === "Urgent") days[idx].urgent++; else days[idx].calm++;
+  }
+  const W = 480, H = 170, left = 24, bottom = 20, top = 6;
+  const plotH = H - bottom - top, plotW = W - left;
+  const peak = Math.max(1, ...days.map((d) => d.urgent + d.calm));
+  const step = peak <= 4 ? 1 : Math.ceil(peak / 4);
+  const yMax = Math.ceil(peak / step) * step;
+  const y = (v) => top + plotH - (v / yMax) * plotH;
+  const slot = plotW / DAYS, barW = Math.min(22, slot * 0.6);
+  const GAP = 2, R = 4;
+  // Rounded data-end on the top of a column only.
+  const colPath = (x, y0, h, round) => {
+    if (h <= 0) return "";
+    const r = round ? Math.min(R, h, barW / 2) : 0;
+    return `M${x},${y0 + h}V${y0 + r}${r ? `Q${x},${y0} ${x + r},${y0}` : ""}H${x + barW - r}${r ? `Q${x + barW},${y0} ${x + barW},${y0 + r}` : ""}V${y0 + h}Z`;
+  };
+  let svg = "";
+  for (let v = 0; v <= yMax; v += step) {
+    svg += `<line x1="${left}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)" stroke-width="1"/>`;
+    svg += `<text x="${left - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  }
+  const fmt = (d) => d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  days.forEach((d, i) => {
+    const x = left + slot * i + (slot - barW) / 2;
+    const calmH = (d.calm / yMax) * plotH;
+    const urgH = (d.urgent / yMax) * plotH;
+    const base = top + plotH;
+    svg += `<path d="${colPath(x, base - calmH, calmH, d.urgent === 0)}" fill="var(--c-calm)"/>`;
+    const urgBase = base - calmH - (calmH > 0 && urgH > 0 ? GAP : 0);
+    svg += `<path d="${colPath(x, urgBase - urgH, urgH, true)}" fill="var(--c-urgent)"/>`;
+    if (i % 3 === (DAYS - 1) % 3) {
+      svg += `<text x="${x + barW / 2}" y="${H - 4}" text-anchor="middle">${fmt(d.date)}</text>`;
+    }
+    const label = d.date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    svg += `<rect x="${left + slot * i}" y="${top}" width="${slot}" height="${plotH}" fill="transparent" data-tip="${label}: ${d.urgent} urgent, ${d.calm} non-urgent"/>`;
+  });
+  $("trend").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Calls per day over the last 14 days, split into urgent and non-urgent">${svg}</svg>`;
+}
+
+function render() { renderOverview(); renderTabs(); renderList(); }
+
+async function load() {
+  try {
+    const resp = await fetch("/api/calls");
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    calls = data;
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    render();
+  } catch (err) {
+    $("list").innerHTML = `<div class="error">Couldn't load calls: ${esc(err.message)}</div>`;
+  }
+}
+
+// Tabs, tiles and bar segments all switch the list below.
+for (const id of ["tabs", "overview"]) {
+  $(id).addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-view]");
+    if (btn && btn.dataset.view) setView(btn.dataset.view);
+  });
+}
+
+$("list").addEventListener("click", async (e) => {
+  const copy = e.target.closest("[data-copy]");
+  if (copy) {
+    navigator.clipboard.writeText(copy.dataset.copy);
+    copy.textContent = "Copied";
+    return;
+  }
+  const btn = e.target.closest("[data-status]");
+  if (!btn) return;
+  btn.disabled = true;
+  const resp = await fetch(`/api/calls/${btn.dataset.id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: btn.dataset.status }),
+  });
+  if (resp.ok) {
+    const call = calls.find((c) => c.id === btn.dataset.id);
+    if (call) call.status = btn.dataset.status;
+    render();
+  } else {
+    btn.disabled = false;
+    alert("Couldn't update the call. Check the terminal running the dashboard.");
+  }
+});
+
+$("search").addEventListener("input", renderList);
+$("refresh").addEventListener("click", load);
+// REFRESH_MINUTES is filled in by server.js from dashboard/.env (default 60).
+setInterval(load, REFRESH_MINUTES * 60000);
+load();
+</script>
+</body>
+</html>
