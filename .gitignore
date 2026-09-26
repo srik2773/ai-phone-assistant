@@ -1,3 +1,4 @@
 node_modules/
 .wrangler/
 dashboard/.env
+.dev.vars

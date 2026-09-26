@@ -40,8 +40,8 @@ installer). On macOS with Homebrew: `brew install node`.
 ## 2. Get the code onto your machine
 
 ```sh
-git clone https://github.com/srik2773/sd-voice
-cd sd-voice
+git clone https://github.com/srik2773/ai-phone-assistant
+cd ai-phone-assistant
 npm install
 ```
 
@@ -59,9 +59,8 @@ npx wrangler login
 npx wrangler kv namespace create CALL_STORE
 ```
 
-This prints an `id`. Open `wrangler.toml` and put that id in the
-`kv_namespaces` entry (it may already be filled in if you're continuing from
-an earlier setup).
+This prints an `id`. Open `wrangler.toml` and replace
+`<your-kv-namespace-id>` in the `kv_namespaces` entry with that id.
 
 ## 5. Create a Twilio account and buy a number
 
@@ -89,6 +88,11 @@ npx wrangler secret put MY_PHONE_NUMBER
 
 - `TWILIO_PHONE_NUMBER` and `MY_PHONE_NUMBER` should both be in **E.164
   format**, e.g. `+61412345678` (country code, no spaces/dashes).
+
+**Not in Australia?** Speech recognition is tuned for Australian English
+(`en-AU`) by default. Open `wrangler.toml`, remove the `# ` in front of the
+`[vars]` and `SPEECH_LANGUAGE` lines, and set it to `en-US`, `en-GB`,
+`en-IN`, etc. to match how your callers speak.
 
 ## 7. Deploy
 
@@ -241,8 +245,15 @@ leaves your laptop except to talk to Airtable.
 - **Cost**: Twilio charges a small monthly fee for the number plus a
   per-minute rate for calls and a per-SMS rate — check current pricing at
   twilio.com/pricing. Each call also makes a few Anthropic API calls.
-- **Model**: default is `claude-sonnet-5`; override via `MODEL` under
-  `[vars]` in `wrangler.toml` if you want to try a cheaper one.
+- **Models**: the live conversation uses `claude-haiku-4-5-20251001` for
+  speed, and the after-call summary uses `claude-sonnet-5`. Override them
+  with `CALL_MODEL` and `MODEL` under `[vars]` in `wrangler.toml`.
+- **If Claude can't be reached** (wrong API key, outage): the caller still
+  hears a polite greeting or goodbye instead of an error, and you still get a
+  text saying someone called. Run `npx wrangler tail` to see the error.
+- **Testing locally**: if you run `npm run dev`, put your secrets in a
+  `.dev.vars` file in the project folder. It's already in `.gitignore`, so it
+  won't be committed.
 - **Silence and unclear answers**: the agent waits up to 10 seconds for the
   caller to start answering. If it hears nothing, or can't make out the
   answer, it politely repeats the question. It only says goodbye after 3

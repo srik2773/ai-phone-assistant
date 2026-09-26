@@ -2,17 +2,20 @@ name = "personal-voice-agent"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
-# Same KV namespace as before, just renamed now that it only stores in-progress call records.
+# Holds in-progress call records. Replace the id with the one printed by
+# `npx wrangler kv namespace create CALL_STORE` (README step 4).
 kv_namespaces = [
   { binding = "CALL_STORE", id = "<your-kv-namespace-id>" }
 ]
 
-# Optional: override the models without editing code.
+# Optional: override the defaults without editing code.
 # CALL_MODEL runs the live conversation (default claude-haiku-4-5-20251001, picked for speed);
 # MODEL writes the after-call summary text (default claude-sonnet-5).
+# SPEECH_LANGUAGE is the language/accent callers speak (default en-AU; e.g. en-US, en-GB, en-IN).
 # [vars]
 # CALL_MODEL = "claude-haiku-4-5-20251001"
 # MODEL = "claude-sonnet-5"
+# SPEECH_LANGUAGE = "en-US"
 
 # Secrets (never put these here — set via `npx wrangler secret put <NAME>`):
 #   ANTHROPIC_API_KEY   - your Anthropic API key
@@ -25,5 +28,3 @@ kv_namespaces = [
 #   AIRTABLE_TOKEN      - Airtable personal access token
 #   AIRTABLE_BASE_ID    - the base id, starts with "app"
 # AIRTABLE_TABLE can go under [vars] if your table isn't named "Calls".
-#
-# The SHARED_SECRET secret from the earlier Siri Shortcut experiment is no longer used and can be left as is or removed.

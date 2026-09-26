@@ -21,10 +21,11 @@ const CALL_MODEL = "claude-haiku-4-5-20251001";
 const CALL_TTL_SECONDS = 60 * 30; // call records only need to survive one call
 
 // Twilio's default recognizer assumes US English and struggles with other
-// accents. Deepgram Nova-3 handles accented speech much better, and en-AU
-// matches where the calls come from.
+// accents. Deepgram Nova-3 handles accented speech much better. The language
+// defaults to Australian English; set the SPEECH_LANGUAGE var (e.g. "en-US",
+// "en-GB", "en-IN") to match where your calls come from.
 const SPEECH_MODEL = "deepgram_nova-3";
-const SPEECH_LANGUAGE = "en-AU";
+const DEFAULT_SPEECH_LANGUAGE = "en-AU";
 // speechTimeout="auto" stops listening at the caller's first pause, which
 // clips people who pause mid-sentence. 1 second still lets them pause
 // briefly without adding much lag after every answer.
@@ -35,6 +36,13 @@ const ANSWER_WAIT_SECONDS = 10;
 // Silent or empty answers in a row before the agent says goodbye. Each one
 // gets the last question repeated politely.
 const MAX_MISSED_ANSWERS = 2;
+
+// Spoken when Claude can't be reached (bad API key, outage), so the caller
+// hears a polite message instead of Twilio's generic application error.
+const FALLBACK_GREETING =
+  "Hi, this is Srikanth's AI assistant. He can't get to the phone right now. Can I get your name and why you're calling?";
+const FALLBACK_GOODBYE =
+  "Sorry, I'm having a technical problem. I'll let Srikanth know you called, and he'll get back to you. Goodbye.";
 
 const CALL_SYSTEM_PROMPT = `You are answering a phone call on behalf of Srikanth, who can't come to the phone right now.
 You are speaking directly to a real caller in a live phone call, so:
@@ -179,10 +187,11 @@ async function parseTwilioRequest(request) {
 // even with actionOnEmptyResult, and with nothing after it the call just
 // ends. The <Redirect> catches that case and posts to /twilio/gather with no
 // SpeechResult, which counts as a missed answer and repeats the question.
-function gatherTwiml(sayText, gatherActionUrl) {
+function gatherTwiml(env, sayText, gatherActionUrl) {
+  const language = xmlEscape(env.SPEECH_LANGUAGE || DEFAULT_SPEECH_LANGUAGE);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${gatherActionUrl}" method="POST" actionOnEmptyResult="true" language="${SPEECH_LANGUAGE}" speechModel="${SPEECH_MODEL}" speechTimeout="${SPEECH_PAUSE_SECONDS}" timeout="${ANSWER_WAIT_SECONDS}">
+  <Gather input="speech" action="${gatherActionUrl}" method="POST" actionOnEmptyResult="true" language="${language}" speechModel="${SPEECH_MODEL}" speechTimeout="${SPEECH_PAUSE_SECONDS}" timeout="${ANSWER_WAIT_SECONDS}">
     <Say voice="Polly.Joanna">${xmlEscape(sayText)}</Say>
   </Gather>
   <Redirect method="POST">${gatherActionUrl}</Redirect>
@@ -212,16 +221,20 @@ async function handleTwilioVoice(request, env, url) {
     { expirationTtl: CALL_TTL_SECONDS }
   );
 
-  const greeting = await callClaude(env, CALL_SYSTEM_PROMPT, [
-    { role: "user", content: "[The call just connected. Give your opening greeting now.]" },
-  ], 400, env.CALL_MODEL || CALL_MODEL);
-  const spoken = greeting.replace("[[HANGUP]]", "").trim() ||
-    "Hi, this is Srikanth's AI assistant. He can't get to the phone right now. Can I get your name and why you're calling?";
+  let greeting = "";
+  try {
+    greeting = await callClaude(env, CALL_SYSTEM_PROMPT, [
+      { role: "user", content: "[The call just connected. Give your opening greeting now.]" },
+    ], 400, env.CALL_MODEL || CALL_MODEL);
+  } catch (err) {
+    console.log("greeting failed, using fallback: " + ((err && err.message) || String(err)));
+  }
+  const spoken = greeting.replace("[[HANGUP]]", "").trim() || FALLBACK_GREETING;
 
   await appendCallTurn(env, callSid, "assistant", spoken);
 
   const gatherUrl = new URL("/twilio/gather", url).toString();
-  return xml(gatherTwiml(spoken, gatherUrl));
+  return xml(gatherTwiml(env, spoken, gatherUrl));
 }
 
 async function appendCallTurn(env, callSid, role, content) {
@@ -259,14 +272,22 @@ async function handleTwilioGather(request, env, url) {
       ? "Sorry, I didn't catch that."
       : "Sorry, I still didn't hear anything. Take your time.";
     const gatherUrl = new URL("/twilio/gather", url).toString();
-    return xml(gatherTwiml(`${opener} ${lastQuestion ? lastQuestion.content : "Could you say that again?"}`, gatherUrl));
+    return xml(gatherTwiml(env, `${opener} ${lastQuestion ? lastQuestion.content : "Could you say that again?"}`, gatherUrl));
   }
 
   record.missedAnswers = 0;
   record.transcript.push({ role: "user", content: speech });
 
   const messages = record.transcript.map((t) => ({ role: t.role, content: t.content }));
-  const reply = await callClaude(env, CALL_SYSTEM_PROMPT, messages, 400, env.CALL_MODEL || CALL_MODEL);
+  let reply;
+  try {
+    reply = await callClaude(env, CALL_SYSTEM_PROMPT, messages, 400, env.CALL_MODEL || CALL_MODEL);
+  } catch (err) {
+    // End politely but keep what the caller said, so the status callback
+    // still texts it to you.
+    console.log("reply failed, ending call: " + ((err && err.message) || String(err)));
+    reply = FALLBACK_GOODBYE + " [[HANGUP]]";
+  }
   const shouldHangup = reply.includes("[[HANGUP]]");
   const spoken = reply.replace("[[HANGUP]]", "").trim() || "Thanks, goodbye.";
 
@@ -278,7 +299,7 @@ async function handleTwilioGather(request, env, url) {
   }
 
   const gatherUrl = new URL("/twilio/gather", url).toString();
-  return xml(gatherTwiml(spoken, gatherUrl));
+  return xml(gatherTwiml(env, spoken, gatherUrl));
 }
 
 async function handleTwilioStatus(request, env, url) {
@@ -314,12 +335,18 @@ async function handleTwilioStatus(request, env, url) {
     .map((t) => `${t.role === "user" ? "Caller" : "Assistant"}: ${t.content}`)
     .join("\n");
 
-  const rawSummary = await callClaude(
-    env,
-    SUMMARY_SYSTEM_PROMPT,
-    [{ role: "user", content: `Caller ID: ${record.from}\n\nTranscript:\n${transcriptText}` }],
-    500
-  );
+  let rawSummary = "";
+  try {
+    rawSummary = await callClaude(
+      env,
+      SUMMARY_SYSTEM_PROMPT,
+      [{ role: "user", content: `Caller ID: ${record.from}\n\nTranscript:\n${transcriptText}` }],
+      500
+    );
+  } catch (err) {
+    // parseSummary's fallback still texts you that the call happened.
+    console.log("summary failed: " + ((err && err.message) || String(err)));
+  }
   const summary = parseSummary(rawSummary, record.from);
 
   await logCallSafely(env, {
